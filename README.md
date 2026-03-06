@@ -1,5 +1,5 @@
 
-# ndicadores Ocupacion y Deteccion
+# Indicadores Ocupacion y Deteccion
 
 Este repositorio contiene el flujo de trabajo para el modelamiento de **Ocupación de Sitios (Single-season Occupancy Models)**. El código utiliza modelos jerárquicos para estimar la probabilidad de presencia de especies detectadas mediante fototrampeo y bioacústica, corrigiendo el sesgo por detectabilidad imperfecta y proyectando los resultados espacialmente.
 
