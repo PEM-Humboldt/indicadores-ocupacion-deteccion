@@ -85,7 +85,6 @@ Siga el orden de los bloques para asegurar la construcción correcta del objeto 
 ## Autores(as) y contacto
 
 * **Juan C Rey** - *Investigador* - [jrey@humboldt.org.co]
-* **Billie Thompson** - *Estructura de documentación* - [PurpleBooth](https://github.com/PurpleBooth)
 
 ---
 
