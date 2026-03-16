@@ -422,3 +422,62 @@ ggsave(filename = "~/Desktop/FPVA/Resultados/Fototrampeo/Dasypus_novemcinctus/Ma
 writeRaster(mapa_ocupacion, 
             "~/Desktop/FPVA/Resultados/Fototrampeo/Dasypus_novemcinctus/Mapa_Ocupacion_Dasypus_novemcinctus.tif", 
             overwrite = TRUE)
+
+# ==========================================================
+# 6. CÁLCULO DE INDICADORES FINALES (RESUMEN EJECUTIVO)
+# ==========================================================
+
+
+# 1. Extraer valores transformados
+psi_sin_cov <- backTransform(fm0, type = "state")
+p_sin_cov   <- backTransform(fm0, type = "det")
+
+# 2. Calcular indicadores
+est_psi <- psi_sin_cov@estimate
+est_p   <- p_sin_cov@estimate
+area_ocupada_pct <- global(mapa_ocupacion, fun = "mean", na.rm = TRUE)[1,1] * 100
+
+# 3. Crear el data.frame correctamente usando SE()
+indicadores_finales <- data.frame(
+  Indicador = c(
+    "Probabilidad de Ocupación (psi) sin covariables",
+    "Probabilidad de Detección (p) sin covariables",
+    "Porcentaje del área de estudio ocupada (estimado)"
+  ),
+  Valor = c(
+    round(est_psi, 3),
+    round(est_p, 3),
+    paste0(round(area_ocupada_pct, 2), "%")
+  ),
+  Error_Estandar = c(
+    round(SE(psi_sin_cov), 3), # Corrección aquí
+    round(SE(p_sin_cov), 3),   # Corrección aquí
+    "N/A"
+  )
+)
+
+# 4. Exportar
+write.csv(indicadores_finales, 
+          file.path(path_out, paste0("Indicadores_Resumen_", gsub(" ", "_", especie_objetivo), ".csv")), 
+          row.names = FALSE)
+
+print("--- RESUMEN DE INDICADORES FINALIZADO ---")
+print(indicadores_finales)
+
+# Opcional: Clasificación de áreas por umbrales (como en tu código de referencia)
+# 1 = Muy baja, 10 = Muy alta
+reclass_m <- matrix(c(0, 0.1, 1,
+                      0.1, 0.2, 2,
+                      0.2, 0.3, 3,
+                      0.3, 0.4, 4,
+                      0.4, 0.5, 5,
+                      0.5, 0.6, 6,
+                      0.6, 0.7, 7,
+                      0.7, 0.8, 8,
+                      0.8, 0.9, 9,
+                      0.9, 1.0, 10), ncol=3, byrow=TRUE)
+
+mapa_clasificado <- classify(mapa_ocupacion, reclass_m)
+writeRaster(mapa_clasificado, 
+            paste0(path_out, "Mapa_Ocupacion_Clasificado_", especie_objetivo, ".tif"), 
+            overwrite = TRUE)
