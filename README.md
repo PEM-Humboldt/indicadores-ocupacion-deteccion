@@ -1,92 +1,143 @@
-
-# Indicadores Ocupacion y Deteccion
+# Indicadores Ocupación y Detección
 
 Este repositorio contiene el flujo de trabajo para el modelamiento de **Ocupación de Sitios (Single-season Occupancy Models)**. El código utiliza modelos jerárquicos para estimar la probabilidad de presencia de especies detectadas mediante fototrampeo y bioacústica, corrigiendo el sesgo por detectabilidad imperfecta y proyectando los resultados espacialmente.
 
-**Estado del Proyecto:** Estable / Finalizado. Incluye la integración de covariables ambientales (Rasters) y la generación de mapas de probabilidad de uso de hábitat.
+**Estado del Proyecto:** Estable / Finalizado. Incluye la integración de covariables ambientales (rásters) y la generación de mapas de probabilidad de uso de hábitat.
 
 ---
 
-## Prerequisitos
+## Estructura del repositorio
 
-Para ejecutar este análisis, es necesario contar con **R (versión 4.0+)** y las siguientes bibliotecas especializadas en ecología y análisis espacial:
+> ⚠️ **Pendiente de confirmar por Juan:** el árbol de abajo se basa en los métodos de detección que mencionas (fototrampeo, bioacústica) y en el script `Occu_bioacustica.R` que ya revisamos. Ajusta nombres y agrega/quita archivos según tu repo real.
 
-* `unmarked`: Motor estadístico para modelos de ocupación y abundancia.
-* `terra` y `sf`: Manejo de objetos ráster y vectores (geoprocesamiento).
-* `tidyterra`: Extensión de ggplot2 para visualizar datos espaciales de terra.
-* `tidyverse` y `lubridate`: Procesamiento de datos y series de tiempo.
+```
+.
+├── data/
+│   ├── I2D_FPVA_Fototrampeo_20260219.xlsx      # Observations, Media, Deployment (fototrampeo)
+│   └── I2D_FPVA_Bioacustica_20260219.xlsx      # Observations, Media, Deployment (bioacústica)
+├── covariables/
+│   ├── agreg_bosque90_2.tif                    # Cobertura boscosa
+│   ├── RiosEudis90.tif                         # Distancia euclidiana a drenajes
+│   └── ViasEudis90.tif                         # Distancia euclidiana a vías
+├── scripts/
+│   ├── 00_prep_covariables.R                   # Carga y estandarización del stack de rásters
+│   ├── Occu_fototrampeo.R                      # Modelos de ocupación para mamíferos (fototrampeo)
+│   ├── Occu_bioacustica.R                      # Modelos de ocupación para aves (bioacústica)
+│   └── Occu_puntos_conteo.R                    # Modelos de ocupación para aves (puntos de conteo), si aplica
+├── outputs/
+│   ├── Tabla_AIC.csv
+│   ├── Curvas_Respuesta.png
+│   └── Mapa_Ocupacion.tif
+├── README.md
+└── LICENCIA
+```
+
+## Descripción de los scripts
+
+| Script | Qué hace | Insumos que usa | Salida principal |
+|---|---|---|---|
+| `00_prep_covariables.R` | Carga el stack de rásters ambientales, extrae los valores en cada punto de muestreo y estandariza los datos (media=0, sd=1) para mejorar la convergencia de los modelos. | Rásters `.tif` + coordenadas de las estaciones | Tabla de covariables estandarizadas por sitio |
+| `Occu_fototrampeo.R` | Ajusta los modelos de ocupación de una sola estación para las especies de mamíferos detectadas por cámaras trampa; selecciona el mejor modelo por AIC y proyecta el mapa de ocupación. | Datos biológicos (fototrampeo) + covariables estandarizadas | `Tabla_AIC.csv`, `Curvas_Respuesta.png`, `Mapa_Ocupacion.tif` |
+| `Occu_bioacustica.R` | Igual que el anterior, pero para especies detectadas por bioacústica. Sigue la misma estructura de `Occu_fototrampeo.R`, con los ajustes propios del método (ventana de ocasión, filtros de validación experta). | Datos biológicos (bioacústica) + covariables estandarizadas | `Tabla_AIC.csv`, `Curvas_Respuesta.png`, `Mapa_Ocupacion.tif` (por especie) |
+| `Occu_puntos_conteo.R` | Igual estructura, para especies registradas en puntos de conteo. | Datos biológicos (puntos de conteo) + covariables estandarizadas | Igual que los anteriores |
+
+> Los tres scripts de modelamiento (`Occu_fototrampeo.R`, `Occu_bioacustica.R`, `Occu_puntos_conteo.R`) comparten la misma estructura interna (pasos 2 a 5 de "Cómo ejecutar"); solo cambian los datos de entrada y algunos parámetros propios del método de detección. `00_prep_covariables.R` es el único paso común que corre antes que los tres.
+> Confirma si estos son en efecto tus 3-4 scripts o si tienen otros nombres/alcances — ajusta la tabla para que sea 1:1 con tu repo.
+
+---
+
+## Prerrequisitos
+
+Para ejecutar este análisis es necesario contar con **R (versión 4.0 o superior)** y las siguientes librerías. Se indican las versiones con las que se probó el flujo, para evitar problemas de compatibilidad en ejecuciones futuras:
+
+| Librería | Uso en el proyecto | Versión probada |
+|---|---|---|
+| `unmarked` | Motor estadístico para modelos de ocupación y abundancia | ⚠️ *completar* |
+| `terra` | Manejo de objetos ráster (geoprocesamiento) | ⚠️ *completar* |
+| `sf` | Manejo de objetos vectoriales (geoprocesamiento) | ⚠️ *completar* |
+| `tidyterra` | Extensión de ggplot2 para visualizar datos espaciales de `terra` | ⚠️ *completar* |
+| `tidyverse` | Procesamiento de datos | ⚠️ *completar* |
+| `lubridate` | Manejo de series de tiempo | ⚠️ *completar* |
+| `openxlsx` | Lectura/escritura de Excel | ⚠️ *completar* |
+
+> Corre `packageVersion("unmarked")` (y equivalente para cada librería) en la sesión donde corriste el análisis, o `sessionInfo()` para capturarlas todas de una vez, y reemplaza los ⚠️ *completar*.
 
 **Instalación:**
 
 ```r
 install.packages(c("unmarked", "terra", "sf", "tidyterra", "tidyverse", "lubridate", "openxlsx"))
-
 ```
 
 ---
 
-## Archivos Necesarios
+## Fundamento metodológico
 
-1. **Datos Biológicos:** Archivo Excel con las pestañas `Observations`, `Media` y `Deployment`.
-2. **Covariables Ambientales:** Archivos en formato `.tif` (Ráster) que representen variables del paisaje. El script espera:
-* `agreg_bosque90_2.tif`: Cobertura boscosa.
-* `RiosEudis90.tif`: Distancia euclidiana a drenajes.
-* `ViasEudis90.tif`: Distancia euclidiana a vías.
+Esta sección explica el *qué* y el *por qué* de los cálculos. El detalle de calidad e incertidumbre de los indicadores derivados (porcentaje de área ocupada, psi y p sin covariables) vive en la ficha del catálogo de indicadores; aquí va lo necesario para entender y reproducir el código.
 
+- **Enfoque:** modelos jerárquicos de ocupación de una sola estación (MacKenzie et al., 2017), siguiendo además las mejores prácticas de eBird para el manejo de datos de detección imperfecta (Strimas-Mackey et al., 2023). El diseño asume que la presencia/ausencia observada en un sitio resulta de dos procesos: uno biológico (ocupación, ψ) y uno de observación (detección, p), lo que permite corregir el sesgo de detectabilidad imperfecta.
+- **Implementación:** paquete `unmarked` de R. Se ajustan modelos nulos (sin covariables) y modelos con covariables ambientales; la selección del modelo más informativo se hace con el Criterio de Información de Akaike (AIC).
+- **Cómo se calcula, paso a paso:**
+  1. **Curaduría:** consolidación de las tablas de monitoreo comunitario (Observations, Media, Deployment).
+  2. **Preparación de covariables:** carga del stack de rásters, extracción de valores por punto de muestreo y estandarización (Z-score).
+  3. **Historia de detección:** construcción de la matriz de presencia/ausencia en ocasiones (por ejemplo, de 7 o 15 días, según el método de detección).
+  4. **Modelamiento:** ajuste en `unmarked`, tanto del modelo nulo (intercepto) como de modelos con covariables ambientales.
+  5. **Extracción de resultados:**
+     - Para ψ y p **sin covariables**, se usan los estimados del intercepto del modelo nulo.
+     - Para el **porcentaje de área ocupada**, se proyectan los coeficientes β del modelo seleccionado sobre los rásters y se aplica un umbral de ψ (definido en la ficha del indicador).
 
+---
 
-* **Ubicación de Covariables:** Deben estar alojadas en la ruta definida en `path_base`.
+## Archivos necesarios
+
+1. **Datos biológicos:** archivo Excel con las pestañas `Observations`, `Media` y `Deployment`.
+2. **Covariables ambientales:** archivos en formato `.tif` (ráster) que representan variables del paisaje. El script usa:
+   - `agreg_bosque90_2.tif`: cobertura boscosa.
+   - `RiosEudis90.tif`: distancia euclidiana a drenajes.
+   - `ViasEudis90.tif`: distancia euclidiana a vías.
+3. **Ubicación de covariables:** deben estar alojadas en la ruta definida en `path_base`.
 
 ---
 
 ## Cómo ejecutar
 
-Siga el orden de los bloques para asegurar la construcción correcta del objeto `unmarkedFrame`:
+El flujo está pensado para correrse **de forma secuencial**. Hay **dos puntos donde el usuario debe interactuar**; el resto corre sin intervención una vez definidas las rutas iniciales:
 
-1. **Preparación de Covariables:**
-* El script carga el stack de rásters, extrae los valores para cada punto de cámara y **estandariza los datos** (media=0, sd=1) para mejorar la convergencia de los modelos.
+1. **Preparación de covariables** *(requiere acción del usuario: definir `path_base` con la ubicación de los rásters)*
+   - El script carga el stack de rásters, extrae los valores para cada punto de cámara y estandariza los datos (media=0, sd=1) para mejorar la convergencia de los modelos.
 
+2. **Construcción de historia de detección** *(se ejecuta sin intervención)*
+   - Se genera una matriz de presencia/ausencia agrupada por ocasiones (ej. intervalos de 15 días).
+   - *Nota:* el script maneja automáticamente los valores `NA` y asegura la coincidencia entre sitios muestreados y covariables.
 
-2. **Construcción de Historia de Detección:**
-* Se genera una matriz de presencia/ausencia agrupada por ocasiones (ej. intervalos de 15 días).
-* *Nota:* El script maneja automáticamente los valores `NA` y asegura la coincidencia entre sitios muestreados y covariables.
+3. **Ajuste y selección de modelos (AIC)** *(se ejecuta sin intervención, salvo que quieras cambiar el set de covariables candidatas)*
+   - Se ejecutan modelos que prueban efectos en la ocupación (ψ) y la detección (p).
+   - Se usa el Criterio de Información de Akaike (AIC) para seleccionar el modelo con mejor soporte estadístico.
 
+4. **Generación de curvas de respuesta** *(se ejecuta sin intervención)*
+   - El script incluye funciones para des-escalar los datos y graficar la respuesta real de la especie ante las variables ambientales (ej. % de bosque o distancia en metros).
 
-3. **Ajuste y Selección de Modelos (AIC):**
-* Se ejecutan modelos que prueban efectos en la **Ocupación ($\psi$)** y la **Detección ($p$)**.
-* Se utiliza el Criterio de Información de Akaike (AIC) para seleccionar el modelo con mejor soporte estadístico.
+5. **Proyección espacial (mapeo)** *(requiere acción del usuario: confirmar/ajustar el umbral de ψ usado para el porcentaje de área ocupada)*
+   - Los coeficientes (β) del modelo ganador se aplican sobre los rásters originales para generar un mapa de probabilidad de ocupación continuo.
 
+### Ejemplo de salida
 
-4. **Generación de Curvas de Respuesta:**
-* El script incluye funciones para des-escalar los datos y graficar la respuesta real de la especie ante las variables ambientales (ej. % de bosque o distancia en metros).
-
-
-5. **Proyección Espacial (Mapeo):**
-* Los coeficientes ($\beta$) del modelo ganador se aplican sobre los rásters originales para generar un **Mapa de Probabilidad de Ocupación** continuo.
-
-
-
-### Ejemplo de Salida
-
-* **Tabla_AIC.csv:** Ranking de modelos para selección del mejor candidato.
-* **Curvas_Respuesta.png:** Gráficas con intervalos de confianza del 95%.
-* **Mapa_Ocupacion.tif:** Archivo ráster listo para ser abierto en **QGIS** o **ArcGIS**.
+* **Tabla_AIC.csv:** ranking de modelos para selección del mejor candidato.
+* **Curvas_Respuesta.png:** gráficas con intervalos de confianza del 95%.
+* **Mapa_Ocupacion.tif:** archivo ráster listo para ser abierto en QGIS o ArcGIS.
 
 ---
 
-## Interpretación de Resultados
+## Interpretación de resultados
 
-* **$\psi$ (Psi):** Probabilidad de que el sitio esté ocupado por la especie.
-* **$p$ (Rho):** Probabilidad de detectar a la especie dado que el sitio está ocupado.
-* **Círculo Rojo/Blanco en Mapa:** Ubicación de las estaciones de muestreo sobre la probabilidad proyectada.
+* **ψ (Psi):** probabilidad de que el sitio esté ocupado por la especie.
+* **p:** probabilidad de detectar a la especie dado que el sitio está ocupado.
+* **Círculo rojo/blanco en el mapa:** ubicación de las estaciones de muestreo sobre la probabilidad proyectada.
 
 ---
 
 ## Autores(as) y contacto
 
-* **Juan C Rey** - *Investigador* - [jrey@humboldt.org.co]
-
----
+* **Juan C Rey** — *Investigador* — [jrey@humboldt.org.co]
 
 ## Licencia
 
@@ -94,7 +145,13 @@ Este proyecto está bajo la licencia MIT.
 
 ## Agradecimientos
 
-* A la librería **unmarked** por proporcionar las herramientas para el análisis de poblaciones animales.
+* A la librería `unmarked` por proporcionar las herramientas para el análisis de poblaciones animales.
 * Al equipo GIS por la provisión de las capas ambientales estandarizadas.
 
----
+## Referencias metodológicas
+
+1. MacKenzie, D.I. et al. (2017). *Occupancy Estimation and Modeling: Inferring Patterns and Dynamics of Species Occurrence* (2nd ed.).
+2. Royle, J.A., Nichols, J.D. & Kéry, M. (2005). Modelling occurrence and abundance of species when detection is imperfect. *Oikos*, 110: 353–359.
+3. Ruiz-Gutiérrez, V., Zipkin, E.F. & Dhondt, A.A. (2010). Occupancy dynamics in a tropical bird community. *Journal of Applied Ecology*, 47: 621–630.
+4. Sollmann, R. (2018). A gentle introduction to camera-trap data analysis. *African Journal of Ecology*, 56: 740–749.
+5. Strimas-Mackey, M. et al. (2023). Best Practices for Using eBird Data.

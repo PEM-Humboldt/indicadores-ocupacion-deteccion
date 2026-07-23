@@ -1,23 +1,12 @@
 # ==============================================================================
-# ANÁLISIS DE OCUPACIÓN - BIOACÚSTICA - FPVA
-# Especies objetivo: Cyanocorax violaceus, Myrmothera campanisona,
-#                    Myrmoborus myotherinus, Ramphastos tucanus,
-#                    Lipaugus vociferans, Akletos melanoceps,
-#                    Hylophylax naevius, Thamnomanes ardesiacus,
-#                    Thamnomanes caesius
+# ANÁLISIS DE OCUPACIÓN - FOTOTRAMPEO - FPVA
+# Especies objetivo: Tapirus terrestris, Cuniculus paca, Dasypus novemcinctus,
+#                    Dicotyles tajacu, Tayassu pecari, Odocoileus virginianus,
+#                    Nasua nasua
 #
 # Metodología: Modelo de ocupación de MacKenzie et al. (2002) via `unmarked`
 # Selección de modelos: dredge() basado en buenas prácticas eBird/GBIF
 # Referencia: https://strimas.com/ebp-workshop-au/occupancy.html
-#
-# DIFERENCIAS CLAVE respecto a fototrampeo:
-#   - Unidad de muestreo: grabador autónomo (recorder), no cámara trampa
-#   - Ocasión de muestreo: 1 día (los grabadores generan registros diarios)
-#   - Covariable de detección: hora pico de vocalización por sitio (en lugar
-#     de hora de actividad animal)
-#   - Esfuerzo: minutos grabados por ocasión (en lugar de días activos)
-#   - La detección se define como presencia de vocalizaciones de la especie
-#     en al menos un archivo de audio del día, validada por el revisor
 # ==============================================================================
 
 # ==========================================================
@@ -37,42 +26,32 @@ library(tidyterra)
 library(openxlsx)
 library(patchwork)
 
-
-
 # ==========================================================
 # 1. CONFIGURACIÓN GENERAL
 # ==========================================================
 
-path_data <- "~/Desktop/FPVA/Data/Bioacustica/Plantilla monitoreo acústico - FPV Amazonía.xlsx"
-path_out  <- "~/Desktop/FPVA/Resultados/Bioacustica/"
+path_data <- "~/Desktop/FPVA/Data/Fototrampeo/I2D_FPVA_Fototrampeo_20260219.xlsx"
+path_out  <- "~/Desktop/FPVA/Resultados/Fototrampeo/"
 if (!dir.exists(path_out)) dir.create(path_out, recursive = TRUE)
 
-# Datos de bioacústica — misma estructura de nombres que fototrampeo
-obs_data <- fread("~/Desktop/FPVA/Data/Bioacustica/observations.csv")   # detecciones
-dev_data <- fread("~/Desktop/FPVA/Data/Bioacustica/deployments.csv")     # grabadores (sitios)
-med_data <- read.xlsx(path_data, sheet = "Media")                        # archivos de audio con timestamps
-path_data <- "~/Desktop/FPVA/Data/Bioacustica/Plantilla monitoreo acústico - FPV Amazonía.xlsx"
-path_out  <- "~/Desktop/FPVA/Resultados/Bioacustica/"
-if (!dir.exists(path_out)) dir.create(path_out, recursive = TRUE)
-
+obs_data <- read.xlsx(path_data, sheet = "Observations")
+med_data <- read.xlsx(path_data, sheet = "Media")
+dev_data <- read.xlsx(path_data, sheet = "Deployment")
 
 # Vector de especies objetivo
 especies_objetivo <- c(
-  "Cyanocorax violaceus",
-  "Myrmothera campanisona",
-  "Myrmoborus myotherinus",
-  "Ramphastos tucanus",
-  "Lipaugus vociferans",
-  "Akletos melanoceps",
-  "Hylophylax naevius",
-  "Thamnomanes ardesiacus",
-  "Thamnomanes caesius"
+  "Tapirus terrestris",
+  "Cuniculus paca",
+  "Dasypus novemcinctus",
+  "Dicotyles tajacu",
+  "Tayassu pecari",
+  "Odocoileus virginianus",
+  "Nasua nasua"
 )
 
 # ==========================================================
-# 2. PREPARACIÓN DE COVARIABLES (idéntico al script de fototrampeo)
+# 2. PREPARACIÓN DE COVARIABLES (Limpieza y Estandarización)
 # ==========================================================
-
 # --- 2.1 Covariables originales ---
 path_base_orig <- "~/Desktop/FPVA/Analisis/Datos/Geograficos/Co-variables Ocupación/"
 
@@ -96,29 +75,44 @@ r_v_sec <- rast(paste0(path_base_new, "viassecundarias_2/viassecundarias_2.tif")
 r_v_pri <- rast(paste0(path_base_new, "Viasprincipales_2.tif/Viasprincipales_2.tif"))
 r_casas <- rast(paste0(path_base_new, "equipamien_eudist_2.tif/equipamien_eudist_2.tif"))
 
-# --- 2.3 Alinear todas las capas al mismo grid de referencia ---
-r_ref <- cov_stack_orig[[1]]  # bosque como referencia
+# ==========================================================
+# 2.3 Alinear todas las capas al mismo grid de referencia
+#     antes de construir el stack
+# ==========================================================
 
+# La capa de bosque será la referencia (define extent, resolución y CRS)
+r_ref <- cov_stack_orig[[1]]  # bosque
+
+# Función auxiliar: reproyectar + recortar + remuestrear al grid de referencia
 alinear_capa <- function(r, referencia) {
-  if (!same.crs(r, referencia)) r <- project(r, crs(referencia))
+  # 1. Si el CRS es distinto, reproyectar primero
+  if (!same.crs(r, referencia)) {
+    r <- project(r, crs(referencia))
+  }
+  # 2. Recortar al extent de referencia (con tolerancia)
   r <- crop(r, ext(referencia))
+  # 3. Remuestrear al mismo grid exacto (resolución + origen)
   r <- resample(r, referencia, method = "bilinear")
   return(r)
 }
 
-r_bosque   <- cov_stack_orig[[1]]
+# Alinear covariables originales entre sí
+r_bosque   <- cov_stack_orig[[1]]  # ya es la referencia
 r_dist_rio <- alinear_capa(cov_stack_orig[[2]], r_ref)
 r_dist_via <- alinear_capa(cov_stack_orig[[3]], r_ref)
-r_ndvi_a   <- alinear_capa(r_ndvi,  r_ref)
-r_ndwi_a   <- alinear_capa(r_ndwi,  r_ref)
-r_d_com_a  <- alinear_capa(r_d_com, r_ref)
-r_d_pri_a  <- alinear_capa(r_d_pri, r_ref)
-r_d_sec_a  <- alinear_capa(r_d_sec, r_ref)
-r_v_com_a  <- alinear_capa(r_v_com, r_ref)
-r_v_sec_a  <- alinear_capa(r_v_sec, r_ref)
-r_v_pri_a  <- alinear_capa(r_v_pri, r_ref)
-r_casas_a  <- alinear_capa(r_casas, r_ref)
 
+# Alinear nuevas covariables
+r_ndvi_a     <- alinear_capa(r_ndvi,  r_ref)
+r_ndwi_a     <- alinear_capa(r_ndwi,  r_ref)
+r_d_com_a    <- alinear_capa(r_d_com, r_ref)
+r_d_pri_a    <- alinear_capa(r_d_pri, r_ref)
+r_d_sec_a    <- alinear_capa(r_d_sec, r_ref)
+r_v_com_a    <- alinear_capa(r_v_com, r_ref)
+r_v_sec_a    <- alinear_capa(r_v_sec, r_ref)
+r_v_pri_a    <- alinear_capa(r_v_pri, r_ref)
+r_casas_a    <- alinear_capa(r_casas, r_ref)
+
+# Construir el stack ya alineado
 cov_stack <- c(
   r_bosque, r_dist_rio, r_dist_via,
   r_ndvi_a, r_ndwi_a,
@@ -134,11 +128,30 @@ names(cov_stack) <- c(
   "dist_casas"
 )
 
-cat("¿Stack alineado correctamente?",
-    compareGeom(cov_stack[[1]], cov_stack[[12]], stopOnError = FALSE), "\n")
+# Verificación rápida — debe imprimir TRUE
+cat("¿Stack alineado correctamente?", compareGeom(cov_stack[[1]], cov_stack[[12]], 
+                                                  stopOnError = FALSE), "\n")
 
-# --- 2.4 Extracción en puntos de muestreo acústico ---
+# --- 2.4 Reproyección de todas las capas a la misma referencia ---
+# Reproyectamos al CRS de la primera capa (bosque) como referencia
+ref_crs <- crs(cov_stack$bosque)
+cov_stack <- lapply(names(cov_stack), function(nm) {
+  r <- cov_stack[[nm]]
+  if (!compareGeom(r, cov_stack$bosque, stopOnError = FALSE)) {
+    r <- project(r, ref_crs)
+    r <- resample(r, cov_stack$bosque, method = "bilinear")
+  }
+  r
+}) |> do.call(what = c)
+names(cov_stack) <- c(
+  "bosque", "dist_rios", "dist_vias",
+  "ndvi", "ndwi",
+  "dist_dren_com", "dist_dren_pri", "dist_dren_sec",
+  "dist_vias_com", "dist_vias_sec", "dist_vias_pri",
+  "dist_casas"
+)
 
+# --- 2.5 Extracción en puntos de fototrampeo ---
 puntos_sf <- dev_data |>
   st_as_sf(coords = c("longitude", "latitude"), crs = 4326) |>
   st_transform(crs(cov_stack))
@@ -146,9 +159,10 @@ puntos_sf <- dev_data |>
 site_covs_raw <- terra::extract(cov_stack, puntos_sf)
 site_covs_raw$deploymentID <- dev_data$deploymentID
 
+# Nombres de todas las covariables de sitio (sin ID)
 cov_names <- names(cov_stack)
 
-# Parámetros de escalado (necesarios para mapas)
+# Guardar parámetros de escalado (media y SD) — necesarios para mapas
 params <- site_covs_raw |>
   summarise(across(all_of(cov_names),
                    list(mu = ~mean(.x, na.rm = TRUE),
@@ -167,43 +181,41 @@ analizar_especie <- function(especie_objetivo) {
   cat("  Procesando:", especie_objetivo, "\n")
   cat("========================================================\n")
   
-  slug     <- gsub(" ", "_", especie_objetivo)
+  # Slug para nombres de archivos
+  slug <- gsub(" ", "_", especie_objetivo)
+  
+  # Carpeta de salida por especie
   path_spp <- file.path(path_out, slug)
   if (!dir.exists(path_spp)) dir.create(path_spp, recursive = TRUE)
   
   # --------------------------------------------------------
-  # 3.1 Unir detecciones con timestamps de los archivos de audio
+  # 3.1 Historia de detección
   # --------------------------------------------------------
-  # Misma lógica que fototrampeo: obs_data + med_data se unen por mediaID
-  det_con_tiempo <- obs_data |>
+  
+  obs_con_tiempo <- obs_data |>
     left_join(med_data |> select(mediaID, timestamp), by = "mediaID") |>
     mutate(time_obj = ymd_hms(timestamp)) |>
     filter(!is.na(time_obj))
   
-  # --------------------------------------------------------
-  # 3.2 Marco temporal desde los despliegues de grabadores
-  # --------------------------------------------------------
-  
+  # CORRECCIÓN 1: fecha_min y fecha_max desde el despliegue de cámaras,
+  # no desde las observaciones. Así todos los sitios comparten el mismo
+  # marco temporal independientemente de cuándo detectaron cada especie.
   fecha_min <- min(as.Date(ymd_hms(dev_data$deploymentStart)), na.rm = TRUE)
   fecha_max <- max(as.Date(ymd_hms(dev_data$deploymentEnd)),   na.rm = TRUE)
   
-  # Para bioacústica usamos ocasiones de 1 DÍA (los grabadores producen
-  # archivos diarios y la detección es por día). Esto maximiza la resolución
-  # temporal y es coherente con cómo se procesan los audios.
-  ventana_dias    <- 1
+  ventana_dias <- 7   # tamaño de cada ocasión en días
   n_ocasiones_total <- as.integer(
     ceiling(as.numeric(difftime(fecha_max, fecha_min, units = "days")) / ventana_dias)
   )
   
-  cat("  Ventana temporal:", as.character(fecha_min), "→", as.character(fecha_max), "\n")
-  cat("  Ocasiones (", ventana_dias, "día c/u):", n_ocasiones_total, "\n")
+  cat("  Ventana temporal del estudio:", as.character(fecha_min),
+      "→", as.character(fecha_max), "\n")
+  cat("  Número total de ocasiones (", ventana_dias, "días c/u):",
+      n_ocasiones_total, "\n")
   
-  # --------------------------------------------------------
-  # 3.3 Historia de detección acústica
-  # --------------------------------------------------------
-  # Una detección = al menos 1 vocalización validada de la especie en ese día
-  # en ese grabador, independientemente de cuántos archivos tenga ese día
-  obs_sp <- det_con_tiempo |>
+  # CORRECCIÓN 2: filtrar observaciones de la especie objetivo
+  # y asignar ocasión dentro del marco temporal del estudio
+  obs_sp <- obs_con_tiempo |>
     filter(scientificName == especie_objetivo) |>
     mutate(
       fecha   = as.Date(time_obj),
@@ -211,25 +223,31 @@ analizar_especie <- function(especie_objetivo) {
         floor(as.numeric(difftime(fecha, fecha_min, units = "days")) / ventana_dias) + 1
       )
     ) |>
+    # Descartar registros fuera del marco temporal (antes o después del estudio)
     filter(ocasion >= 1, ocasion <= n_ocasiones_total)
   
-  cat("  Registros acústicos dentro del marco temporal:", nrow(obs_sp), "\n")
+  cat("  Registros de", especie_objetivo, "dentro del marco temporal:",
+      nrow(obs_sp), "\n")
   
+  # CORRECCIÓN 3: construir matriz con todas las ocasiones como columnas,
+  # incluso las que no tienen detección (valores fijos)
   todas_ocasiones <- 1:n_ocasiones_total
   
   y_matrix <- obs_sp |>
     group_by(deploymentID, ocasion) |>
     summarise(presencia = 1L, .groups = "drop") |>
+    # Completar todas las combinaciones sitio x ocasión
     complete(
       deploymentID = site_covs_scaled$deploymentID,
       ocasion      = todas_ocasiones,
       fill         = list(presencia = 0L)
     ) |>
-    pivot_wider(names_from   = ocasion,
-                values_from  = presencia,
-                values_fill  = 0L,
-                names_prefix = "oc_")
+    pivot_wider(names_from  = ocasion,
+                values_from = presencia,
+                values_fill = 0L,
+                names_prefix = "oc_")   # prefijo para evitar columnas numéricas sueltas
   
+  # CORRECCIÓN 4: alinear al orden de sitios en site_covs_scaled
   y_final <- site_covs_scaled |>
     select(deploymentID) |>
     left_join(y_matrix, by = "deploymentID") |>
@@ -237,57 +255,45 @@ analizar_especie <- function(especie_objetivo) {
     as.matrix()
   y_final[is.na(y_final)] <- 0L
   
+  # Diagnóstico rápido
   cat("  Sitios:", nrow(y_final),
       "| Ocasiones:", ncol(y_final),
       "| Detecciones totales:", sum(y_final), "\n")
   cat("  Sitios con ≥1 detección:", sum(rowSums(y_final) > 0), "\n")
   
   if (sum(y_final, na.rm = TRUE) < 5) {
-    cat("  ADVERTENCIA: Muy pocas detecciones — análisis omitido.\n")
+    cat("  ADVERTENCIA: Muy pocas detecciones para", especie_objetivo,
+        "— análisis omitido.\n")
     return(invisible(NULL))
   }
   
   # --------------------------------------------------------
-  # 3.4 Covariable de detección: hora pico de vocalización
+  # 3.2 Covariable de detección: hora de actividad
   # --------------------------------------------------------
-  # En aves la hora del día tiene un efecto fuerte en la detectabilidad:
-  # las aves vocalizan más al amanecer (coro del alba). Usamos la hora
-  # promedio de detección por sitio como proxy del patrón de actividad vocal.
-  hora_sitio <- det_con_tiempo |>
+  hora_sitio <- obs_con_tiempo |>
     filter(scientificName == especie_objetivo) |>
-    mutate(hora = hour(time_obj) + minute(time_obj) / 60) |>  # hora decimal
+    mutate(hora = hour(time_obj)) |>
     group_by(deploymentID) |>
-    summarise(hora_pico = mean(hora, na.rm = TRUE)) |>
+    summarise(hora_promedio = mean(hora, na.rm = TRUE)) |>
     right_join(data.frame(deploymentID = site_covs_scaled$deploymentID),
                by = "deploymentID") |>
-    mutate(hora_pico = replace_na(hora_pico, mean(hora_pico, na.rm = TRUE)))
+    mutate(hora_promedio = replace_na(hora_promedio, mean(hora_promedio, na.rm = TRUE)))
   
-  params$hora_pico_mu <- mean(hora_sitio$hora_pico, na.rm = TRUE)
-  params$hora_pico_sd <- sd(hora_sitio$hora_pico,   na.rm = TRUE)
+  params$hora_actividad_mu <- mean(hora_sitio$hora_promedio, na.rm = TRUE)
+  params$hora_actividad_sd <- sd(hora_sitio$hora_promedio,   na.rm = TRUE)
   
   # --------------------------------------------------------
-  # 3.5 Esfuerzo de muestreo acústico (obs-covs)
+  # 3.3 Esfuerzo de muestreo (matriz de obs-covs)
   # --------------------------------------------------------
-  # El esfuerzo en bioacústica es el número de minutos grabados por día
-  # en cada sitio. Si tienes esa información en rec_data, úsala aquí.
-  # Por defecto asumimos grabadores programados 24h (1440 min/día).
-  # Si tienes datos reales de duración, reemplaza con la matriz correspondiente.
   n_ocasiones <- ncol(y_final)
-  n_sitios    <- nrow(y_final)
-  
-  # Opción A — esfuerzo constante (grabadores activos todo el día)
-  effort_mat <- matrix(1440L, nrow = n_sitios, ncol = n_ocasiones)
-  
-  # Opción B — esfuerzo variable desde rec_data (descomenta si aplica):
-  # effort_mat <- calcular_esfuerzo_acustico(rec_data, dep_data,
-  #   site_covs_scaled$deploymentID, fecha_min, ventana_dias, n_ocasiones)
+  effort_mat  <- matrix(15L, nrow = nrow(y_final), ncol = n_ocasiones)
   
   # --------------------------------------------------------
-  # 3.6 Construcción del unmarkedFrame
+  # 3.4 Construcción del unmarkedFrame
   # --------------------------------------------------------
   site_covs_umf <- site_covs_scaled |>
-    mutate(hora_pico = scale(hora_sitio$hora_pico)[, 1]) |>
-    select(all_of(cov_names), hora_pico)
+    mutate(hora_actividad = scale(hora_sitio$hora_promedio)[, 1]) |>
+    select(all_of(cov_names), hora_actividad)
   
   umf <- unmarkedFrameOccu(
     y        = y_final,
@@ -296,15 +302,22 @@ analizar_especie <- function(especie_objetivo) {
   )
   
   # --------------------------------------------------------
-  # 3.7 Modelo global — con filtro automático de correlación
+  # 3.5 Modelo global — con filtro automático de correlación
   # --------------------------------------------------------
+  
+  # CORRECCIÓN: cov_seleccionadas siempre parte siendo todas las covariables.
+  # El bloque de filtro puede reducirla, pero si no hay problemas queda igual.
   cov_seleccionadas <- cov_names
-  umbral_cor        <- 0.7
+  
+  umbral_cor <- 0.7
+  
+  cor_mat <- cor(site_covs_umf[, cov_names], use = "complete.obs")
   
   repeat {
     cor_sub <- cor(site_covs_umf[, cov_seleccionadas], use = "complete.obs")
     cor_sub[lower.tri(cor_sub, diag = TRUE)] <- NA
     problema <- which(abs(cor_sub) > umbral_cor, arr.ind = TRUE)
+    
     if (nrow(problema) == 0) break
     
     vars_problema <- unique(c(rownames(cor_sub)[problema[, 1]],
@@ -313,13 +326,15 @@ analizar_especie <- function(especie_objetivo) {
       sum(abs(cor_sub[v, ]) > umbral_cor, na.rm = TRUE) +
         sum(abs(cor_sub[, v]) > umbral_cor, na.rm = TRUE)
     })
+    
     eliminar <- names(which.max(n_cors))
     cat("  Eliminando por correlación alta (|r| >", umbral_cor, "):", eliminar, "\n")
     cov_seleccionadas <- setdiff(cov_seleccionadas, eliminar)
+    
     if (length(cov_seleccionadas) < 2) break
   }
   
-  # Filtro por ratio eventos/parámetros (mínimo 10 det. por parámetro)
+  # Filtro por ratio eventos/parámetros
   n_det    <- sum(y_final, na.rm = TRUE)
   n_params <- length(cov_seleccionadas) + 3
   ratio_EP <- n_det / n_params
@@ -331,7 +346,6 @@ analizar_especie <- function(especie_objetivo) {
   if (ratio_EP < 10) {
     n_max_cov <- max(1, floor(n_det / 10) - 2)
     cat("  ADVERTENCIA: ratio E/P bajo. Reduciendo a", n_max_cov, "covariable(s).\n")
-    # Prioridad ecológica para aves de dosel amazónico
     prioridad <- c("bosque", "ndvi", "ndwi", "dist_rios", "dist_dren_com",
                    "dist_dren_pri", "dist_dren_sec", "dist_vias", "dist_casas",
                    "dist_vias_com", "dist_vias_sec", "dist_vias_pri")
@@ -339,35 +353,39 @@ analizar_especie <- function(especie_objetivo) {
     cat("  Covariables finales:", paste(cov_seleccionadas, collapse = ", "), "\n")
   }
   
-  # NOTA: la detección en aves depende de hora_pico y esfuerzo (min grabados)
+  # Construir y ajustar modelo global
   formula_global <- as.formula(
-    paste("~ hora_pico + esfuerzo ~", paste(cov_seleccionadas, collapse = " + "))
+    paste("~ hora_actividad + esfuerzo ~", paste(cov_seleccionadas, collapse = " + "))
   )
   cat("  Fórmula global:", deparse(formula_global), "\n")
   
   occ_global <- tryCatch(
     occu(formula_global, data = umf),
     error = function(e) {
-      cat("  ERROR en modelo global:", conditionMessage(e), "\n"); NULL
+      cat("  ERROR en modelo global:", conditionMessage(e), "\n")
+      return(NULL)
     }
   )
   if (is.null(occ_global)) return(invisible(NULL))
   
-  if (occ_global@opt$convergence != 0)
+  if (occ_global@opt$convergence != 0) {
     cat("  ADVERTENCIA: modelo global no convergió (código:",
         occ_global@opt$convergence, ").\n")
+  }
   
   # --------------------------------------------------------
-  # 3.8 SELECCIÓN DE MODELOS (dredge)
+  # 3.6 SELECCIÓN DE MODELOS
   # --------------------------------------------------------
   cat("  Ejecutando dredge() — puede tardar varios minutos...\n")
   
-  # Fijar términos de detección (hora_pico + esfuerzo) en todos los submodelos
+  # Identificar términos de detección para fijarlos en todos los submodelos
   det_terms <- getAllTerms(occ_global) |>
     discard(str_detect, pattern = "psi")
   
+  # Evaluamos todos los submodelos de ocupación manteniendo fija la detección
   occ_dredge <- dredge(occ_global, fixed = det_terms)
   
+  # Tabla de selección
   tabla_dredge <- as.data.frame(occ_dredge) |>
     select(starts_with("psi("), df, AICc, delta, weight) |>
     mutate(across(where(is.numeric), ~ round(.x, 3)))
@@ -380,53 +398,67 @@ analizar_especie <- function(especie_objetivo) {
   print(head(tabla_dredge, 5))
   
   # --------------------------------------------------------
-  # 3.9 Promediado de modelos (top 95% peso AICc)
+  # 3.7 Promediado de modelos (model averaging — top 95% peso)
   # --------------------------------------------------------
   occ_dredge_95 <- get.models(occ_dredge, subset = cumsum(weight) <= 0.95)
   occ_avg       <- model.avg(occ_dredge_95, fit = TRUE)
   
   cat("  Modelos incluidos en promediado:", length(occ_dredge_95), "\n")
   
+  # Guardar resumen del modelo promediado
   sink(file.path(path_spp, paste0("Resumen_ModeloPromediado_", slug, ".txt")))
   print(summary(occ_avg))
   sink()
   
   # --------------------------------------------------------
-  # 3.10 Modelo nulo para indicadores base
+  # 3.8 Modelo nulo para indicadores base
   # --------------------------------------------------------
   fm0 <- occu(~1 ~1, data = umf)
   
+  
   # --------------------------------------------------------
-  # 3.11 GRÁFICAS DE RESPUESTA — todas las covariables
+  # 3.9 GRÁFICAS DE RESPUESTA — todas las covariables
   # --------------------------------------------------------
   
-  # Función robusta para extraer predicciones (model.avg vs occu)
+  # Función robusta: detecta automáticamente los nombres de columna
+  # según si el modelo es model.avg o un occu simple
   get_pred_df <- function(modelo, nd, type = "state") {
     pred <- predict(modelo, newdata = nd, type = type)
+    
+    # model.avg devuelve: fit, se.fit (sin intervalos directos)
+    # occu/predict devuelve: Predicted, SE, lower, upper
     if ("Predicted" %in% names(pred)) {
-      data.frame(fit = pred$Predicted, lo = pred$lower, hi = pred$upper)
+      data.frame(fit = pred$Predicted,
+                 lo  = pred$lower,
+                 hi  = pred$upper)
     } else {
+      # Calcular IC 95% manualmente desde SE (escala logit → prob)
       data.frame(fit = pred$fit,
                  lo  = pmax(0, pred$fit - 1.96 * pred$se.fit),
                  hi  = pmin(1, pred$fit + 1.96 * pred$se.fit))
     }
   }
   
-  # Función genérica de curva de respuesta de ocupación
+  # Función genérica de curva de respuesta
   plot_occu <- function(var_name, label_x, color_fill,
-                        modelo     = occ_avg,
-                        covs_en_nd = cov_seleccionadas) {
+                        modelo       = occ_avg,
+                        covs_en_nd   = cov_seleccionadas,
+                        site_raw     = site_covs_raw) {
+    
     mu_v    <- params[[paste0(var_name, "_mu")]]
     sd_v    <- params[[paste0(var_name, "_sd")]]
-    raw_seq <- seq(min(site_covs_raw[[var_name]], na.rm = TRUE),
-                   max(site_covs_raw[[var_name]], na.rm = TRUE),
-                   length = 200)
+    
+    raw_seq    <- seq(min(site_raw[[var_name]], na.rm = TRUE),
+                      max(site_raw[[var_name]], na.rm = TRUE),
+                      length = 200)
     scaled_seq <- (raw_seq - mu_v) / sd_v
     
+    # newdata con todas las covariables del modelo en 0,
+    # variando solo la variable de interés
     nd <- as.data.frame(matrix(
       0, nrow = 200,
       ncol = length(covs_en_nd) + 1,
-      dimnames = list(NULL, c(covs_en_nd, "hora_pico"))   # ← hora_pico para aves
+      dimnames = list(NULL, c(covs_en_nd, "hora_actividad"))
     ))
     nd[[var_name]] <- scaled_seq
     
@@ -447,6 +479,7 @@ analizar_especie <- function(especie_objetivo) {
       ylim(0, 1)
   }
   
+  # Paleta y etiquetas — cubre todas las covariables posibles
   colores_occu <- c(
     bosque        = "darkgreen",
     ndvi          = "olivedrab",
@@ -480,39 +513,47 @@ analizar_especie <- function(especie_objetivo) {
   
   plots_occu <- list()
   
+  # --- Curva por cada covariable retenida en el modelo ---
   for (v in cov_seleccionadas) {
     cat("  Graficando:", v, "\n")
     p <- tryCatch(
       plot_occu(v, labels_occu[[v]], colores_occu[[v]]),
       error = function(e) {
-        cat("  No se pudo graficar:", v, "—", conditionMessage(e), "\n"); NULL
+        cat("  No se pudo graficar:", v, "—", conditionMessage(e), "\n")
+        NULL
       }
     )
     if (!is.null(p)) {
       plots_occu[[v]] <- p
-      ggsave(file.path(path_spp, paste0("Curva_Occu_", v, "_", slug, ".png")),
-             plot = p, width = 7, height = 5, dpi = 200)
+      ggsave(
+        filename = file.path(path_spp, paste0("Curva_Occu_", v, "_", slug, ".png")),
+        plot = p, width = 7, height = 5, dpi = 200
+      )
     }
   }
   
   # --------------------------------------------------------
-  # 3.11b ÍNDICE COMBINADO NDVI + NDWI
+  # 3.9b ÍNDICE COMBINADO NDVI + NDWI
   # --------------------------------------------------------
   if (all(c("ndvi", "ndwi") %in% cov_seleccionadas)) {
     
     cat("  Generando índice combinado NDVI + NDWI...\n")
     
-    ndvi_z     <- as.numeric(scale(site_covs_umf$ndvi))
-    ndwi_z     <- as.numeric(scale(site_covs_umf$ndwi))
+    # Construir el índice: suma de Z-scores de cada índice, re-estandarizado
+    ndvi_z <- as.numeric(scale(site_covs_umf$ndvi))
+    ndwi_z <- as.numeric(scale(site_covs_umf$ndwi))
     indice_raw <- ndvi_z + ndwi_z
+    
     site_covs_umf$ndvi_ndwi <- as.numeric(scale(indice_raw))
     
-    params$ndvi_ndwi_mu <- 0
+    # Parámetros para reconstruir el eje X en escala interpretable
+    params$ndvi_ndwi_mu <- 0  # ya está centrado
     params$ndvi_ndwi_sd <- 1
     
+    # umf y modelo con índice combinado (reemplaza ndvi y ndwi)
     cov_comb     <- c(setdiff(cov_seleccionadas, c("ndvi", "ndwi")), "ndvi_ndwi")
     formula_comb <- as.formula(
-      paste("~ hora_pico + esfuerzo ~", paste(cov_comb, collapse = " + "))
+      paste("~ hora_actividad + esfuerzo ~", paste(cov_comb, collapse = " + "))
     )
     
     umf_comb <- unmarkedFrameOccu(
@@ -521,7 +562,7 @@ analizar_especie <- function(especie_objetivo) {
       obsCovs  = list(esfuerzo = effort_mat)
     )
     
-    cat("  Ajustando modelo combinado:", deparse(formula_comb), "\n")
+    cat("  Ajustando modelo con índice combinado:", deparse(formula_comb), "\n")
     occ_comb <- tryCatch(
       occu(formula_comb, data = umf_comb),
       error = function(e) {
@@ -530,12 +571,16 @@ analizar_especie <- function(especie_objetivo) {
     )
     
     if (!is.null(occ_comb)) {
+      
+      # Curva de respuesta del índice combinado
       idx_seq <- seq(min(site_covs_umf$ndvi_ndwi, na.rm = TRUE),
-                     max(site_covs_umf$ndvi_ndwi, na.rm = TRUE), length = 200)
+                     max(site_covs_umf$ndvi_ndwi, na.rm = TRUE),
+                     length = 200)
+      
       nd_comb <- as.data.frame(matrix(
         0, nrow = 200,
         ncol = length(cov_comb) + 1,
-        dimnames = list(NULL, c(cov_comb, "hora_pico"))
+        dimnames = list(NULL, c(cov_comb, "hora_actividad"))
       ))
       nd_comb$ndvi_ndwi <- idx_seq
       
@@ -557,20 +602,26 @@ analizar_especie <- function(especie_objetivo) {
         ylim(0, 1)
       
       plots_occu[["ndvi_ndwi"]] <- p_comb
-      ggsave(file.path(path_spp, paste0("Curva_Occu_NDVI_NDWI_", slug, ".png")),
-             plot = p_comb, width = 7, height = 5, dpi = 200)
+      ggsave(
+        filename = file.path(path_spp, paste0("Curva_Occu_NDVI_NDWI_", slug, ".png")),
+        plot = p_comb, width = 7, height = 5, dpi = 200
+      )
       
-      # Comparación AIC: combinado vs. individuales
+      # Comparación AIC: combinado vs. solo NDVI vs. solo NDWI
       fm_ndvi_solo <- tryCatch(
-        occu(as.formula(paste("~ hora_pico + esfuerzo ~",
+        occu(as.formula(paste("~ hora_actividad + esfuerzo ~",
                               paste(c(setdiff(cov_seleccionadas, c("ndvi","ndwi")), "ndvi"),
                                     collapse = " + "))),
-             data = umf), error = function(e) NULL)
+             data = umf),
+        error = function(e) NULL
+      )
       fm_ndwi_solo <- tryCatch(
-        occu(as.formula(paste("~ hora_pico + esfuerzo ~",
+        occu(as.formula(paste("~ hora_actividad + esfuerzo ~",
                               paste(c(setdiff(cov_seleccionadas, c("ndvi","ndwi")), "ndwi"),
                                     collapse = " + "))),
-             data = umf), error = function(e) NULL)
+             data = umf),
+        error = function(e) NULL
+      )
       
       lista_comp <- list("NDVI_NDWI_combinado" = occ_comb)
       if (!is.null(fm_ndvi_solo)) lista_comp[["Solo_NDVI"]] <- fm_ndvi_solo
@@ -587,11 +638,11 @@ analizar_especie <- function(especie_objetivo) {
       }
     }
   } else {
-    cat("  NDVI o NDWI no en cov_seleccionadas — índice combinado omitido.\n")
+    cat("  NDVI o NDWI no están en cov_seleccionadas — índice combinado omitido.\n")
   }
   
   # --------------------------------------------------------
-  # 3.11c PANEL COMPLETO
+  # 3.9c PANEL COMPLETO — todas las curvas juntas
   # --------------------------------------------------------
   plots_validos <- Filter(Negate(is.null), plots_occu)
   cat("  Total de gráficas generadas:", length(plots_validos), "\n")
@@ -599,23 +650,31 @@ analizar_especie <- function(especie_objetivo) {
   if (length(plots_validos) >= 2) {
     n_col  <- 3
     n_fila <- ceiling(length(plots_validos) / n_col)
+    
     panel_final <- wrap_plots(plots_validos, ncol = n_col) +
       plot_annotation(
         title    = paste("Respuestas de ocupación —", especie_objetivo),
         subtitle = paste("Modelo promediado (top 95% AICc) |",
                          length(plots_validos), "covariables"),
-        theme    = theme(plot.title    = element_text(size = 14, face = "bold"),
-                         plot.subtitle = element_text(size = 11, color = "grey40"))
+        theme    = theme(
+          plot.title    = element_text(size = 14, face = "bold"),
+          plot.subtitle = element_text(size = 11, color = "grey40")
+        )
       )
-    ggsave(file.path(path_spp, paste0("Panel_Completo_Ocupacion_", slug, ".png")),
-           plot = panel_final,
-           width = n_col * 7, height = n_fila * 5, dpi = 200)
+    
+    ggsave(
+      filename = file.path(path_spp, paste0("Panel_Completo_Ocupacion_", slug, ".png")),
+      plot     = panel_final,
+      width    = n_col * 7,
+      height   = n_fila * 5,
+      dpi      = 200
+    )
     cat("  Panel guardado con", length(plots_validos), "gráficas.\n")
   }
-  
   # --------------------------------------------------------
-  # 3.12 MAPA DE OCUPACIÓN (modelo promediado)
+  # 3.10 MAPA DE OCUPACIÓN (con modelo promediado)
   # --------------------------------------------------------
+  # Escalar el stack completo con los parámetros de los sitios de muestreo
   env_scaled <- cov_stack
   for (v in cov_names) {
     mu_v <- params[[paste0(v, "_mu")]]
@@ -623,31 +682,41 @@ analizar_especie <- function(especie_objetivo) {
     env_scaled[[v]] <- (cov_stack[[v]] - mu_v) / sd_v
   }
   
+  # Superficie de predicción (todas las celdas del raster)
   pred_surface <- as.data.frame(env_scaled, xy = TRUE, na.rm = FALSE)
-  pred_surface$hora_pico <- 0   # hora en su media escalada (0)
+  pred_surface$hora_actividad <- 0  # Fijamos hora en su media (= 0 escalado)
   
-  cat("  Generando predicciones espaciales...\n")
+  # Predicción con modelo promediado
+  cat("  Generando predicciones espaciales (modelo promediado)...\n")
   occ_pred <- tryCatch(
     predict(occ_avg,
-            newdata = pred_surface[, c(cov_names, "hora_pico")],
+            newdata = pred_surface[, c(cov_names, "hora_actividad")],
             type    = "state"),
     error = function(e) {
-      cat("  ERROR en predicción espacial:", conditionMessage(e), "\n"); NULL
+      cat("  ERROR en predicción espacial:", conditionMessage(e), "\n")
+      return(NULL)
     }
   )
   
   if (!is.null(occ_pred)) {
+    # Insertar predicciones en el raster de referencia
+    # NOTA: fit es la probabilidad de OCUPACIÓN (0 = no ocupado, 1 = totalmente ocupado)
+    # El mapa muestra correctamente: valores ALTOS = mayor probabilidad de presencia
     r_pred <- rast(cov_stack[[1]])
     values(r_pred) <- NA_real_
+    
+    # Identificar celdas sin NA en todas las covariables
     celdas_validas <- complete.cases(pred_surface[, cov_names])
     values(r_pred)[celdas_validas] <- occ_pred$fit[celdas_validas]
     names(r_pred) <- "Probabilidad_Ocupacion"
     
+    # Error estándar
     r_se <- rast(cov_stack[[1]])
     values(r_se) <- NA_real_
     values(r_se)[celdas_validas] <- occ_pred$se.fit[celdas_validas]
     names(r_se) <- "Error_Estandar"
     
+    # Exportar rasters
     writeRaster(r_pred,
                 file.path(path_spp, paste0("Mapa_Ocupacion_", slug, ".tif")),
                 overwrite = TRUE)
@@ -655,38 +724,65 @@ analizar_especie <- function(especie_objetivo) {
                 file.path(path_spp, paste0("Mapa_SE_Ocupacion_", slug, ".tif")),
                 overwrite = TRUE)
     
+    # Mapa clasificado (1–10)
     reclass_m <- matrix(
-      c(0.0,0.1,1, 0.1,0.2,2, 0.2,0.3,3, 0.3,0.4,4, 0.4,0.5,5,
-        0.5,0.6,6, 0.6,0.7,7, 0.7,0.8,8, 0.8,0.9,9, 0.9,1.0,10),
-      ncol = 3, byrow = TRUE)
-    writeRaster(classify(r_pred, reclass_m),
+      c(0.0, 0.1, 1,  0.1, 0.2, 2,  0.2, 0.3, 3,
+        0.3, 0.4, 4,  0.4, 0.5, 5,  0.5, 0.6, 6,
+        0.6, 0.7, 7,  0.7, 0.8, 8,  0.8, 0.9, 9,
+        0.9, 1.0, 10),
+      ncol = 3, byrow = TRUE
+    )
+    r_clasificado <- classify(r_pred, reclass_m)
+    writeRaster(r_clasificado,
                 file.path(path_spp, paste0("Mapa_Ocupacion_Clasificado_", slug, ".tif")),
                 overwrite = TRUE)
     
+    # Gráfica del mapa
+    # scale_fill_viridis_c: valores BAJOS = morado (ausente), valores ALTOS = amarillo (ocupado)
     mapa_plot <- ggplot() +
       geom_spatraster(data = r_pred) +
-      scale_fill_viridis_c(option = "viridis", na.value = "transparent",
-                           name = "ψ (Prob. Ocupación)",
-                           limits = c(0, 1), direction = 1) +
+      scale_fill_viridis_c(
+        option   = "viridis",
+        na.value = "transparent",
+        name     = "ψ (Prob. Ocupación)",
+        limits   = c(0, 1),
+        # direction = 1 asegura que 0=oscuro (ausente), 1=claro (ocupado)
+        direction = 1
+      ) +
       geom_sf(data = puntos_sf, color = "red", size = 0.8, alpha = 0.6) +
-      labs(title    = paste("Mapa de Ocupación —", especie_objetivo),
-           subtitle = "Modelo promediado (top 95% AICc) | Rojo = grabadores",
-           caption  = "0 = sin ocupación, 1 = máxima probabilidad de ocupación") +
+      labs(
+        title    = paste("Mapa de Ocupación —", especie_objetivo),
+        subtitle = "Modelo promediado (top 95% AICc weight) | Rojo = cámaras trampa",
+        caption  = "0 = sin ocupación, 1 = máxima probabilidad de ocupación"
+      ) +
       theme_minimal(base_size = 11)
     
-    ggsave(file.path(path_spp, paste0("Mapa_Ocupacion_", slug, ".png")),
-           plot = mapa_plot, width = 10, height = 8, dpi = 300)
+    ggsave(
+      filename = file.path(path_spp, paste0("Mapa_Ocupacion_", slug, ".png")),
+      plot     = mapa_plot,
+      width = 10, height = 8, dpi = 300
+    )
     
+    # Mapa de incertidumbre (SE)
     mapa_se_plot <- ggplot() +
       geom_spatraster(data = r_se) +
-      scale_fill_viridis_c(option = "magma", na.value = "transparent",
-                           name = "Error estándar", direction = 1) +
-      labs(title    = paste("Incertidumbre (SE) —", especie_objetivo),
-           subtitle = "Valores altos = mayor incertidumbre en la estimación") +
+      scale_fill_viridis_c(
+        option   = "magma",
+        na.value = "transparent",
+        name     = "Error estándar",
+        direction = 1
+      ) +
+      labs(
+        title    = paste("Incertidumbre (SE) —", especie_objetivo),
+        subtitle = "Valores altos = mayor incertidumbre en la estimación"
+      ) +
       theme_minimal(base_size = 11)
     
-    ggsave(file.path(path_spp, paste0("Mapa_SE_Ocupacion_", slug, ".png")),
-           plot = mapa_se_plot, width = 10, height = 8, dpi = 300)
+    ggsave(
+      filename = file.path(path_spp, paste0("Mapa_SE_Ocupacion_", slug, ".png")),
+      plot     = mapa_se_plot,
+      width = 10, height = 8, dpi = 300
+    )
     
   } else {
     r_pred <- NULL
@@ -694,7 +790,7 @@ analizar_especie <- function(especie_objetivo) {
   }
   
   # --------------------------------------------------------
-  # 3.13 INDICADORES FINALES
+  # 3.11 INDICADORES FINALES
   # --------------------------------------------------------
   psi_sin_cov <- backTransform(fm0, type = "state")
   p_sin_cov   <- backTransform(fm0, type = "det")
@@ -710,15 +806,13 @@ analizar_especie <- function(especie_objetivo) {
       "Probabilidad de Detección (p) — modelo nulo",
       "Porcentaje del área de estudio con ψ > 0.5",
       "N° modelos en promediado (95% weight)",
-      "N° detecciones acústicas totales"
+      "N° detecciones totales"
     ),
     Valor = c(
       round(psi_sin_cov@estimate, 3),
       round(p_sin_cov@estimate,   3),
-      if (!is.null(r_pred))
-        round(global(r_pred > 0.5, fun = "sum", na.rm = TRUE)[1,1] /
-                global(!is.na(r_pred), fun = "sum", na.rm = TRUE)[1,1] * 100, 2)
-      else NA,
+      if (!is.null(r_pred)) round(global(r_pred > 0.5, fun = "sum", na.rm = TRUE)[1, 1] /
+                                    global(!is.na(r_pred), fun = "sum", na.rm = TRUE)[1, 1] * 100, 2) else NA,
       length(occ_dredge_95),
       sum(y_final, na.rm = TRUE)
     ),
@@ -767,6 +861,13 @@ cat("========================================================\n")
 # ==========================================================
 # 5. TABLA RESUMEN COMPARATIVA (TODAS LAS ESPECIES)
 # ==========================================================
+resumen_global <- lapply(nombres_con_resultado, function(sp) {
+  res <- resultados[[sp]]
+  if (is.null(res)) return(NULL)
+  res$indicadores
+}) |>
+  bind_rows()
+
 nombres_con_resultado <- names(Filter(Negate(is.null), resultados))
 
 resumen_global <- lapply(nombres_con_resultado, function(sp) {
@@ -777,5 +878,4 @@ write.csv(resumen_global,
           file.path(path_out, "Resumen_Global_Todas_Especies.csv"),
           row.names = FALSE)
 
-cat("Tabla comparativa guardada en:",
-    file.path(path_out, "Resumen_Global_Todas_Especies.csv"), "\n")
+cat("Tabla comparativa guardada en:", file.path(path_out, "Resumen_Global_Todas_Especies.csv"), "\n")

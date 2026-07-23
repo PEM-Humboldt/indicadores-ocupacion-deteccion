@@ -464,6 +464,51 @@ write.csv(indicadores_finales,
 print("--- RESUMEN DE INDICADORES FINALIZADO ---")
 print(indicadores_finales)
 
+# --- 6.1. Probabilidades Media (Sin Covariables) ---
+# Extraemos los valores del modelo nulo (fm0) que representa el promedio global
+# backTransform convierte del espacio logit a probabilidad (0-1)
+
+psi_sin_cov <- backTransform(fm0, type = "state")
+p_sin_cov   <- backTransform(fm0, type = "det")
+
+est_psi <- psi_sin_cov@estimate
+est_p   <- p_sin_cov@estimate
+
+# --- 6.2. Porcentaje del Área de Estudio Ocupada ---
+# Usamos el mapa de ocupación generado anteriormente (mapa_ocupacion)
+# Calculamos el promedio de todas las celdas del raster de probabilidad
+
+area_ocupada_pct <- global(mapa_ocupacion, fun = "mean", na.rm = TRUE)[1,1] * 100
+
+# --- 6.3. Reporte de Resultados ---
+
+indicadores_finales <- data.frame(
+  Indicador = c(
+    "Probabilidad de Ocupación (psi) sin covariables",
+    "Probabilidad de Detección (p) sin covariables",
+    "Porcentaje del área de estudio ocupada (estimado)"
+  ),
+  Valor = c(
+    round(est_psi, 3),
+    round(est_p, 3),
+    paste0(round(area_ocupada_pct, 2), "%")
+  ),
+  Error_Estandar = c(
+    round(psi_sin_cov@SE, 3),
+    round(p_sin_cov@SE, 3),
+    "N/A"
+  )
+)
+
+print("--- RESUMEN DE INDICADORES PARA LA ESPECIE ---")
+print(indicadores_finales)
+
+# --- 6.4. Exportar Resultados ---
+
+write.csv(indicadores_finales, 
+          paste0(path_out, "Indicadores_Resumen_", especie_objetivo, ".csv"), 
+          row.names = FALSE)
+
 # Opcional: Clasificación de áreas por umbrales (como en tu código de referencia)
 # 1 = Muy baja, 10 = Muy alta
 reclass_m <- matrix(c(0, 0.1, 1,
