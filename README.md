@@ -8,7 +8,6 @@ Este repositorio contiene el flujo de trabajo para el modelamiento de **Ocupaci�
 
 ## Estructura del repositorio
 
-> ⚠️ **Pendiente de confirmar por Juan:** el árbol de abajo se basa en los métodos de detección que mencionas (fototrampeo, bioacústica) y en el script `Occu_bioacustica.R` que ya revisamos. Ajusta nombres y agrega/quita archivos según tu repo real.
 
 ```
 .
@@ -41,9 +40,6 @@ Este repositorio contiene el flujo de trabajo para el modelamiento de **Ocupaci�
 | `Occu_bioacustica.R` | Igual que el anterior, pero para especies detectadas por bioacústica. Sigue la misma estructura de `Occu_fototrampeo.R`, con los ajustes propios del método (ventana de ocasión, filtros de validación experta). | Datos biológicos (bioacústica) + covariables estandarizadas | `Tabla_AIC.csv`, `Curvas_Respuesta.png`, `Mapa_Ocupacion.tif` (por especie) |
 | `Occu_puntos_conteo.R` | Igual estructura, para especies registradas en puntos de conteo. | Datos biológicos (puntos de conteo) + covariables estandarizadas | Igual que los anteriores |
 
-> Los tres scripts de modelamiento (`Occu_fototrampeo.R`, `Occu_bioacustica.R`, `Occu_puntos_conteo.R`) comparten la misma estructura interna (pasos 2 a 5 de "Cómo ejecutar"); solo cambian los datos de entrada y algunos parámetros propios del método de detección. `00_prep_covariables.R` es el único paso común que corre antes que los tres.
-> Confirma si estos son en efecto tus 3-4 scripts o si tienen otros nombres/alcances — ajusta la tabla para que sea 1:1 con tu repo.
-
 ---
 
 ## Prerrequisitos
@@ -52,15 +48,14 @@ Para ejecutar este análisis es necesario contar con **R (versión 4.0 o superio
 
 | Librería | Uso en el proyecto | Versión probada |
 |---|---|---|
-| `unmarked` | Motor estadístico para modelos de ocupación y abundancia | ⚠️ *completar* |
-| `terra` | Manejo de objetos ráster (geoprocesamiento) | ⚠️ *completar* |
-| `sf` | Manejo de objetos vectoriales (geoprocesamiento) | ⚠️ *completar* |
-| `tidyterra` | Extensión de ggplot2 para visualizar datos espaciales de `terra` | ⚠️ *completar* |
-| `tidyverse` | Procesamiento de datos | ⚠️ *completar* |
-| `lubridate` | Manejo de series de tiempo | ⚠️ *completar* |
-| `openxlsx` | Lectura/escritura de Excel | ⚠️ *completar* |
+| `unmarked` | Motor estadístico para modelos de ocupación y abundancia | ‘1.4.1’|
+| `terra` | Manejo de objetos ráster (geoprocesamiento) | ‘1.8.60’ |
+| `sf` | Manejo de objetos vectoriales (geoprocesamiento) | ‘1.0.21’ |
+| `tidyterra` | Extensión de ggplot2 para visualizar datos espaciales de `terra` | ‘0.7.2’ |
+| `tidyverse` | Procesamiento de datos | ‘2.0.0’ |
+| `lubridate` | Manejo de series de tiempo | ‘1.9.2’ |
+| `openxlsx` | Lectura/escritura de Excel | ‘4.2.5.2’ |
 
-> Corre `packageVersion("unmarked")` (y equivalente para cada librería) en la sesión donde corriste el análisis, o `sessionInfo()` para capturarlas todas de una vez, y reemplaza los ⚠️ *completar*.
 
 **Instalación:**
 
@@ -145,8 +140,7 @@ Este proyecto está bajo la licencia MIT.
 
 ## Agradecimientos
 
-* A la librería `unmarked` por proporcionar las herramientas para el análisis de poblaciones animales.
-* Al equipo GIS por la provisión de las capas ambientales estandarizadas.
+* Al equipo de campo del proyecto **FPVA**  y a la comunidad por la recolección de los datos biológicos.
 
 ## Referencias metodológicas
 
