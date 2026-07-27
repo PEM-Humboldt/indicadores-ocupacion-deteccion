@@ -7,6 +7,22 @@ El siguiente flujo de trabajo integra los siguientes indicadores:
 - Probabilidad de detección (p, sin covariables): qué tan probable es registrar la especie dado que está presente.
 - Probabilidad de ocupación (ψ, sin covariables): probabilidad de que un sitio esté ocupado por la especie.
 ---
+## Fundamento metodológico
+
+Esta sección explica el *qué* y el *por qué* de los cálculos. El detalle de calidad e incertidumbre de los indicadores derivados (porcentaje de área ocupada, psi y p sin covariables) vive en la ficha del catálogo de indicadores; aquí va lo necesario para entender y reproducir el código.
+
+- **Enfoque:** modelos jerárquicos de ocupación de una sola estación (MacKenzie et al., 2017), siguiendo además las mejores prácticas de eBird para el manejo de datos de detección imperfecta (Strimas-Mackey et al., 2023). El diseño asume que la presencia/ausencia observada en un sitio resulta de dos procesos: uno biológico (ocupación, ψ) y uno de observación (detección, p), lo que permite corregir el sesgo de detectabilidad imperfecta.
+- **Implementación:** paquete `unmarked` de R. Se ajustan modelos nulos (sin covariables) y modelos con covariables ambientales; la selección del modelo más informativo se hace con el Criterio de Información de Akaike (AIC).
+- **Cómo se calcula, paso a paso:**
+  1. **Curaduría:** consolidación de las tablas de monitoreo comunitario (Observations, Media, Deployment).
+  2. **Preparación de covariables:** carga del stack de rásters, extracción de valores por punto de muestreo y estandarización (Z-score).
+  3. **Historia de detección:** construcción de la matriz de presencia/ausencia en ocasiones (por ejemplo, de 7 o 15 días, según el método de detección).
+  4. **Modelamiento:** ajuste en `unmarked`, tanto del modelo nulo (intercepto) como de modelos con covariables ambientales.
+  5. **Extracción de resultados:**
+     - Para ψ y p **sin covariables**, se usan los estimados del intercepto del modelo nulo.
+     - Para el **porcentaje de área ocupada**, se proyectan los coeficientes β del modelo seleccionado sobre los rásters y se aplica un umbral de ψ (definido en la ficha del indicador).
+
+---
 
 ## Estructura del repositorio
 
@@ -67,22 +83,6 @@ install.packages(c("unmarked", "terra", "sf", "tidyterra", "tidyverse", "lubrida
 
 ---
 
-## Fundamento metodológico
-
-Esta sección explica el *qué* y el *por qué* de los cálculos. El detalle de calidad e incertidumbre de los indicadores derivados (porcentaje de área ocupada, psi y p sin covariables) vive en la ficha del catálogo de indicadores; aquí va lo necesario para entender y reproducir el código.
-
-- **Enfoque:** modelos jerárquicos de ocupación de una sola estación (MacKenzie et al., 2017), siguiendo además las mejores prácticas de eBird para el manejo de datos de detección imperfecta (Strimas-Mackey et al., 2023). El diseño asume que la presencia/ausencia observada en un sitio resulta de dos procesos: uno biológico (ocupación, ψ) y uno de observación (detección, p), lo que permite corregir el sesgo de detectabilidad imperfecta.
-- **Implementación:** paquete `unmarked` de R. Se ajustan modelos nulos (sin covariables) y modelos con covariables ambientales; la selección del modelo más informativo se hace con el Criterio de Información de Akaike (AIC).
-- **Cómo se calcula, paso a paso:**
-  1. **Curaduría:** consolidación de las tablas de monitoreo comunitario (Observations, Media, Deployment).
-  2. **Preparación de covariables:** carga del stack de rásters, extracción de valores por punto de muestreo y estandarización (Z-score).
-  3. **Historia de detección:** construcción de la matriz de presencia/ausencia en ocasiones (por ejemplo, de 7 o 15 días, según el método de detección).
-  4. **Modelamiento:** ajuste en `unmarked`, tanto del modelo nulo (intercepto) como de modelos con covariables ambientales.
-  5. **Extracción de resultados:**
-     - Para ψ y p **sin covariables**, se usan los estimados del intercepto del modelo nulo.
-     - Para el **porcentaje de área ocupada**, se proyectan los coeficientes β del modelo seleccionado sobre los rásters y se aplica un umbral de ψ (definido en la ficha del indicador).
-
----
 
 ## Archivos necesarios
 
