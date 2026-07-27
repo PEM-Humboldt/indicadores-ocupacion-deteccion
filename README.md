@@ -2,8 +2,10 @@
 
 Este repositorio contiene el flujo de trabajo para el modelamiento de **Ocupación de Sitios (Single-season Occupancy Models)**. El código utiliza modelos jerárquicos para estimar la probabilidad de presencia de especies detectadas mediante fototrampeo y bioacústica, corrigiendo el sesgo por detectabilidad imperfecta y proyectando los resultados espacialmente.
 
-**Estado del Proyecto:** Estable / Finalizado. Incluye la integración de covariables ambientales (rásters) y la generación de mapas de probabilidad de uso de hábitat.
-
+El siguiente flujo de trabajo integra los siguientes indicadores:
+- Porcentaje del área de estudio ocupada por la especie: proporción del área donde el modelo predice presencia (ψ ≥ umbral definido).
+- Probabilidad de detección (p, sin covariables): qué tan probable es registrar la especie dado que está presente.
+- Probabilidad de ocupación (ψ, sin covariables): probabilidad de que un sitio esté ocupado por la especie.
 ---
 
 ## Estructura del repositorio
