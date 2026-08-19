@@ -1,153 +1,150 @@
-# Indicadores Ocupación y Detección
+# Indicadores de ocupación y detección
 
-Este repositorio contiene el flujo de trabajo para el modelamiento de **Ocupación de Sitios (Single-season Occupancy Models)**. El código utiliza modelos jerárquicos para estimar la probabilidad de presencia de especies detectadas mediante fototrampeo y bioacústica, corrigiendo el sesgo por detectabilidad imperfecta y proyectando los resultados espacialmente.
+Este repositorio calcula **3 indicadores de ocupación** a partir de datos de
+monitoreo con visitas repetidas (fototrampeo, bioacústica, puntos de conteo,
+etc.), usando modelos de ocupación de una sola temporada (MacKenzie et al.
+2017). Está pensado para que cualquier persona con conocimientos básicos de R
+pueda ejecutarlo de principio a fin con **solo tres covariables ambientales
+sencillas**, sin necesidad de manejar archivos ráster ni herramientas de SIG.
 
-El siguiente flujo de trabajo integra los siguientes indicadores:
-- Porcentaje del área de estudio ocupada por la especie: proporción del área donde el modelo predice presencia (ψ ≥ umbral definido).
-- Probabilidad de detección (p, sin covariables): qué tan probable es registrar la especie dado que está presente.
-- Probabilidad de ocupación (ψ, sin covariables): probabilidad de que un sitio esté ocupado por la especie.
----
-## Fundamento metodológico
+## Indicadores que calcula
 
-Esta sección explica el *qué* y el *por qué* de los cálculos. El detalle de calidad e incertidumbre de los indicadores derivados (porcentaje de área ocupada, psi y p sin covariables) vive en la ficha del catálogo de indicadores; aquí va lo necesario para entender y reproducir el código.
+| # | Indicador | Qué significa |
+|---|---|---|
+| 1 | Probabilidad de ocupación (ψ, sin covariables) | Probabilidad de que un sitio esté ocupado por la especie |
+| 2 | Probabilidad de detección (p, sin covariables) | Probabilidad de detectar la especie dado que el sitio está ocupado |
+| 3 | Porcentaje del área ocupada | % de un paisaje hipotético (grid) donde el modelo predice ψ ≥ 0.5 |
 
-- **Enfoque:** modelos jerárquicos de ocupación de una sola estación (MacKenzie et al., 2017), siguiendo además las mejores prácticas de eBird para el manejo de datos de detección imperfecta (Strimas-Mackey et al., 2023). El diseño asume que la presencia/ausencia observada en un sitio resulta de dos procesos: uno biológico (ocupación, ψ) y uno de observación (detección, p), lo que permite corregir el sesgo de detectabilidad imperfecta.
-- **Implementación:** paquete `unmarked` de R. Se ajustan modelos nulos (sin covariables) y modelos con covariables ambientales; la selección del modelo más informativo se hace con el Criterio de Información de Akaike (AIC).
-- **Cómo se calcula, paso a paso:**
-  1. **Curaduría:** consolidación de las tablas de monitoreo comunitario (Observations, Media, Deployment).
-  2. **Preparación de covariables:** carga del stack de rásters, extracción de valores por punto de muestreo y estandarización (Z-score).
-  3. **Historia de detección:** construcción de la matriz de presencia/ausencia en ocasiones (por ejemplo, de 7 o 15 días, según el método de detección).
-  4. **Modelamiento:** ajuste en `unmarked`, tanto del modelo nulo (intercepto) como de modelos con covariables ambientales.
-  5. **Extracción de resultados:**
-     - Para ψ y p **sin covariables**, se usan los estimados del intercepto del modelo nulo.
-     - Para el **porcentaje de área ocupada**, se proyectan los coeficientes β del modelo seleccionado sobre los rásters y se aplica un umbral de ψ (definido en la ficha del indicador).
+Los tres se calculan con `scripts/03_modelo_ocupacion.R`.
 
----
+## Simplificación frente a la versión anterior
+
+La versión anterior de este flujo trabajaba con archivos ráster (`.tif`),
+reproyecciones y alineación de grids a 100 m, lo que exigía conocimientos de
+SIG. Esta versión reemplaza los ráster por una **tabla de covariables por
+sitio** y una **tabla de "grid" hipotético** (un CSV con muchas celdas
+imaginarias del paisaje) — así el indicador 3 (% de área ocupada) se calcula
+igual, pero sin depender de `terra`, `sf` ni de archivos geográficos.
+
+Si más adelante quieres volver a usar covariables ráster reales, basta con
+reemplazar `data/grid_prediccion.csv` por los valores extraídos de tus
+ráster (una fila por celda) — el resto del flujo no cambia.
 
 ## Estructura del repositorio
-
 
 ```
 .
 ├── data/
-│   ├── I2D_FPVA_Fototrampeo_20260219.xlsx      # Observations, Media, Deployment (fototrampeo)
-│   └── I2D_FPVA_Bioacustica_20260219.xlsx      # Observations, Media, Deployment (bioacústica)
-├── covariables/
-│   ├── agreg_bosque90_2.tif                    # Cobertura boscosa
-│   ├── RiosEudis90.tif                         # Distancia euclidiana a drenajes
-│   └── ViasEudis90.tif                         # Distancia euclidiana a vías
+│   ├── observaciones.csv          # historia de detección por visita (datos de ejemplo)
+│   ├── sitios_covariables.csv     # las 3 covariables por sitio de muestreo
+│   └── grid_prediccion.csv        # paisaje hipotético para proyectar el % de área ocupada
 ├── scripts/
-│   ├── 00_prep_covariables.R                   # Carga y estandarización del stack de rásters
-│   ├── Occu_fototrampeo.R                      # Modelos de ocupación para mamíferos (fototrampeo)
-│   ├── Occu_bioacustica.R                      # Modelos de ocupación para aves (bioacústica)
-│   └── Occu_puntos_conteo.R                    # Modelos de ocupación para aves (puntos de conteo), si aplica
-├── outputs/
-│   ├── Tabla_AIC.csv
-│   ├── Curvas_Respuesta.png
-│   └── Mapa_Ocupacion.tif
-├── README.md
-└── LICENCIA
+│   ├── 00_correr_todo.R           # corre todo el flujo en orden
+│   ├── 01_cargar_datos.R
+│   ├── 02_historia_deteccion.R
+│   ├── 03_modelo_ocupacion.R
+│   └── 04_exportar_resultados.R
+├── resultados/                     # aquí se guardan el Excel y los gráficos
+└── README.md
 ```
 
-## Descripción de los scripts
+## Datos de ejemplo (inventados)
 
-| Script | Qué hace | Insumos que usa | Salida principal |
-|---|---|---|---|
-| `00_prep_covariables.R` | Carga el stack de rásters ambientales, extrae los valores en cada punto de muestreo y estandariza los datos (media=0, sd=1) para mejorar la convergencia de los modelos. | Rásters `.tif` + coordenadas de las estaciones | Tabla de covariables estandarizadas por sitio |
-| `Occu_fototrampeo.R` | Ajusta los modelos de ocupación de una sola estación para las especies de mamíferos detectadas por cámaras trampa; selecciona el mejor modelo por AIC y proyecta el mapa de ocupación. | Datos biológicos (fototrampeo) + covariables estandarizadas | `Tabla_AIC.csv`, `Curvas_Respuesta.png`, `Mapa_Ocupacion.tif` |
-| `Occu_bioacustica.R` | Igual que el anterior, pero para especies detectadas por bioacústica. Sigue la misma estructura de `Occu_fototrampeo.R`, con los ajustes propios del método (ventana de ocasión, filtros de validación experta). | Datos biológicos (bioacústica) + covariables estandarizadas | `Tabla_AIC.csv`, `Curvas_Respuesta.png`, `Mapa_Ocupacion.tif` (por especie) |
-| `Occu_puntos_conteo.R` | Igual estructura, para especies registradas en puntos de conteo. | Datos biológicos (puntos de conteo) + covariables estandarizadas | Igual que los anteriores |
+El repositorio incluye datos simulados de 12 cámaras trampa con 5 visitas cada
+una, para una especie de ejemplo (*Dicotyles tajacu*).
 
----
+**`data/observaciones.csv`** — una fila por visita:
+
+| Columna | Descripción |
+|---|---|
+| `sitio` | Identificador del sitio (ej. `C01`) |
+| `visita` | Número de la ocasión de muestreo (1 a 5) |
+| `especie` | Nombre científico |
+| `detectado` | `1` si hubo detección en esa visita, `0` si no |
+
+**`data/sitios_covariables.csv`** — las 3 covariables por sitio:
+
+| Columna | Descripción |
+|---|---|
+| `sitio` | Identificador del sitio |
+| `pct_bosque` | % de cobertura boscosa alrededor del sitio |
+| `dist_rio_m` | Distancia al río o drenaje más cercano (metros) |
+| `dist_via_m` | Distancia a la vía más cercana (metros) |
+
+**`data/grid_prediccion.csv`** — paisaje hipotético para proyectar el modelo:
+
+| Columna | Descripción |
+|---|---|
+| `id_celda` | Identificador de la celda del paisaje |
+| `pct_bosque`, `dist_rio_m`, `dist_via_m` | Mismas 3 covariables, para muchas celdas imaginarias |
+
+Para usar tus propios datos, reemplaza estos tres archivos manteniendo las
+mismas columnas. Puedes cambiar la especie a modelar editando
+`especie_objetivo` en `scripts/02_historia_deteccion.R`.
 
 ## Prerrequisitos
 
-Para ejecutar este análisis es necesario contar con **R (versión 4.0 o superior)** y las siguientes librerías. Se indican las versiones con las que se probó el flujo, para evitar problemas de compatibilidad en ejecuciones futuras:
-
-| Librería | Uso en el proyecto | Versión probada |
-|---|---|---|
-| `unmarked` | Motor estadístico para modelos de ocupación y abundancia | ‘1.4.1’|
-| `terra` | Manejo de objetos ráster (geoprocesamiento) | ‘1.8.60’ |
-| `sf` | Manejo de objetos vectoriales (geoprocesamiento) | ‘1.0.21’ |
-| `tidyterra` | Extensión de ggplot2 para visualizar datos espaciales de `terra` | ‘0.7.2’ |
-| `tidyverse` | Procesamiento de datos | ‘2.0.0’ |
-| `lubridate` | Manejo de series de tiempo | ‘1.9.2’ |
-| `openxlsx` | Lectura/escritura de Excel | ‘4.2.5.2’ |
-
-
-**Instalación:**
+R (4.0 o superior) y las siguientes librerías:
 
 ```r
-install.packages(c("unmarked", "terra", "sf", "tidyterra", "tidyverse", "lubridate", "openxlsx"))
+install.packages(c("tidyverse", "unmarked", "openxlsx"))
 ```
 
----
-
-
-## Archivos necesarios
-
-1. **Datos biológicos:** archivo Excel con las pestañas `Observations`, `Media` y `Deployment`.
-2. **Covariables ambientales:** archivos en formato `.tif` (ráster) que representan variables del paisaje. El script usa:
-   - `agreg_bosque90_2.tif`: cobertura boscosa.
-   - `RiosEudis90.tif`: distancia euclidiana a drenajes.
-   - `ViasEudis90.tif`: distancia euclidiana a vías.
-3. **Ubicación de covariables:** deben estar alojadas en la ruta definida en `path_base`.
-
----
+| Librería | Uso |
+|---|---|
+| `dplyr`, `tidyr`, `readr` (tidyverse) | Manipulación de datos |
+| `unmarked` | Modelos de ocupación |
+| `ggplot2` | Curva de respuesta y gráfico del grid |
+| `openxlsx` | Exportar el libro de Excel final |
 
 ## Cómo ejecutar
 
-El flujo está pensado para correrse **de forma secuencial**. Hay **dos puntos donde el usuario debe interactuar**; el resto corre sin intervención una vez definidas las rutas iniciales:
+1. Descarga o clona el repositorio y ábrelo como tu directorio de trabajo en R.
+2. Corre el script maestro:
 
-1. **Preparación de covariables** *(requiere acción del usuario: definir `path_base` con la ubicación de los rásters)*
-   - El script carga el stack de rásters, extrae los valores para cada punto de cámara y estandariza los datos (media=0, sd=1) para mejorar la convergencia de los modelos.
+   ```r
+   source("scripts/00_correr_todo.R")
+   ```
 
-2. **Construcción de historia de detección** *(se ejecuta sin intervención)*
-   - Se genera una matriz de presencia/ausencia agrupada por ocasiones (ej. intervalos de 15 días).
-   - *Nota:* el script maneja automáticamente los valores `NA` y asegura la coincidencia entre sitios muestreados y covariables.
+3. Revisa la carpeta `resultados/`: encontrarás el libro
+   `Indicadores_Ocupacion.xlsx` (con los 3 indicadores, la tabla de selección
+   de modelo por AIC y la predicción por celda del grid) y dos gráficos
+   (`01_curva_respuesta_bosque.png`, `02_grid_ocupacion.png`).
 
-3. **Ajuste y selección de modelos (AIC)** *(se ejecuta sin intervención, salvo que quieras cambiar el set de covariables candidatas)*
-   - Se ejecutan modelos que prueban efectos en la ocupación (ψ) y la detección (p).
-   - Se usa el Criterio de Información de Akaike (AIC) para seleccionar el modelo con mejor soporte estadístico.
+Si prefieres ejecutar paso a paso, corre los scripts de la carpeta `scripts/`
+en el orden en que están numerados (01 a 04); cada uno depende de los
+objetos creados por el anterior.
 
-4. **Generación de curvas de respuesta** *(se ejecuta sin intervención)*
-   - El script incluye funciones para des-escalar los datos y graficar la respuesta real de la especie ante las variables ambientales (ej. % de bosque o distancia en metros).
+### Cosas que puedes ajustar
 
-5. **Proyección espacial (mapeo)** *(requiere acción del usuario: confirmar/ajustar el umbral de ψ usado para el porcentaje de área ocupada)*
-   - Los coeficientes (β) del modelo ganador se aplican sobre los rásters originales para generar un mapa de probabilidad de ocupación continuo.
-
-### Ejemplo de salida
-
-* **Tabla_AIC.csv:** ranking de modelos para selección del mejor candidato.
-* **Curvas_Respuesta.png:** gráficas con intervalos de confianza del 95%.
-* **Mapa_Ocupacion.tif:** archivo ráster listo para ser abierto en QGIS o ArcGIS.
-
----
+- **`especie_objetivo`** en `02_historia_deteccion.R`: la especie a modelar.
+- **`UMBRAL_PSI`** en `03_modelo_ocupacion.R`: el umbral de ψ para calcular el
+  % de área ocupada (por defecto 0.5).
+- El modelo con covariables usa las 3 juntas (`psi ~ pct_bosque + dist_rio_m +
+  dist_via_m`); si quieres comparar más combinaciones de covariables, agrega
+  más modelos `occu()` a la tabla de selección por AIC en
+  `03_modelo_ocupacion.R`.
 
 ## Interpretación de resultados
 
 * **ψ (Psi):** probabilidad de que el sitio esté ocupado por la especie.
-* **p:** probabilidad de detectar a la especie dado que el sitio está ocupado.
-* **Círculo rojo/blanco en el mapa:** ubicación de las estaciones de muestreo sobre la probabilidad proyectada.
-
----
+* **p:** probabilidad de detectar la especie dado que el sitio está ocupado.
+* **% de área ocupada:** proporción de celdas del grid de predicción donde
+  ψ ≥ el umbral definido.
 
 ## Autores(as) y contacto
 
-* **Juan C Rey** — *Investigador* — [jrey@humboldt.org.co]
+* **Juan C Rey** — *Investigador* — jrey@humboldt.org.co
 
 ## Licencia
 
 Este proyecto está bajo la licencia MIT.
 
-## Agradecimientos
-
-* Al equipo de campo del proyecto **FPVA**  y a la comunidad por la recolección de los datos biológicos.
-
 ## Referencias metodológicas
 
-1. MacKenzie, D.I. et al. (2017). *Occupancy Estimation and Modeling: Inferring Patterns and Dynamics of Species Occurrence* (2nd ed.).
-2. Royle, J.A., Nichols, J.D. & Kéry, M. (2005). Modelling occurrence and abundance of species when detection is imperfect. *Oikos*, 110: 353–359.
-3. Ruiz-Gutiérrez, V., Zipkin, E.F. & Dhondt, A.A. (2010). Occupancy dynamics in a tropical bird community. *Journal of Applied Ecology*, 47: 621–630.
-4. Sollmann, R. (2018). A gentle introduction to camera-trap data analysis. *African Journal of Ecology*, 56: 740–749.
-5. Strimas-Mackey, M. et al. (2023). Best Practices for Using eBird Data.
+1. MacKenzie, D.I. et al. (2017). *Occupancy Estimation and Modeling:
+   Inferring Patterns and Dynamics of Species Occurrence* (2nd ed.).
+2. Royle, J.A., Nichols, J.D. & Kéry, M. (2005). Modelling occurrence and
+   abundance of species when detection is imperfect. *Oikos*, 110: 353–359.
+3. Sollmann, R. (2018). A gentle introduction to camera-trap data analysis.
+   *African Journal of Ecology*, 56: 740–749.
