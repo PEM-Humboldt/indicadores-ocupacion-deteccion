@@ -90,12 +90,16 @@ R (4.0 o superior) y las siguientes librerías:
 install.packages(c("tidyverse", "unmarked", "openxlsx"))
 ```
 
-| Librería | Uso |
+| Librería | Uso | Versión |
 |---|---|
-| `dplyr`, `tidyr`, `readr` (tidyverse) | Manipulación de datos |
-| `unmarked` | Modelos de ocupación |
-| `ggplot2` | Curva de respuesta y gráfico del grid |
-| `openxlsx` | Exportar el libro de Excel final |
+|---|---|---|
+| `unmarked` | Motor estadístico para modelos de ocupación y abundancia | ‘1.4.1’|
+| `terra` | Manejo de objetos ráster (geoprocesamiento) | ‘1.8.60’ |
+| `sf` | Manejo de objetos vectoriales (geoprocesamiento) | ‘1.0.21’ |
+| `tidyterra` | Extensión de ggplot2 para visualizar datos espaciales de `terra` | ‘0.7.2’ |
+| `tidyverse` | Procesamiento de datos | ‘2.0.0’ |
+| `lubridate` | Manejo de series de tiempo | ‘1.9.2’ |
+| `openxlsx` | Lectura/escritura de Excel | ‘4.2.5.2’ |
 
 ## Cómo ejecutar
 
