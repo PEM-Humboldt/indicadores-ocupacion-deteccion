@@ -90,8 +90,7 @@ R (4.0 o superior) y las siguientes librerías:
 install.packages(c("tidyverse", "unmarked", "openxlsx"))
 ```
 
-| Librería | Uso | Versión |
-|---|---|
+| Librería | Uso en el proyecto | Versión probada |
 |---|---|---|
 | `unmarked` | Motor estadístico para modelos de ocupación y abundancia | ‘1.4.1’|
 | `terra` | Manejo de objetos ráster (geoprocesamiento) | ‘1.8.60’ |
